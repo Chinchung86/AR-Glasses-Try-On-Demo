@@ -1,222 +1,143 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <!-- Ensure proper scaling -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AR Glasses Try-On Demo</title>
-
-    <!-- A-Frame Library for 3D model viewing -->
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <!-- Mediapipe libraries for FaceMesh (for later integration) -->
+    <meta charset="utf-8">
+    <title>Unified AR Glasses Try-On</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- A-Frame library -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <!-- Mediapipe FaceMesh and helpers -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <!-- QRious Library for generating QR codes -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-
+    <!-- QR Code generation library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100vw;
-        height: 100vh;
-      }
-      /* Container layout for desktop (side-by-side) */
-      @media (min-width: 768px) {
-        .container {
-          display: flex;
-          flex-direction: row;
-          width: 100vw;
-          height: 100vh;
-        }
-        /* A-Frame scene occupies the left half */
-        #arScene {
-          width: 50vw;
-          height: 100vh;
-          background: #f0f0f0;
-        }
-        /* Right side: QR container and Try On button centered vertically */
-        .qr-side {
-          width: 50vw;
-          height: 100vh;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          position: relative;
-        }
-        #qr-label {
-          margin-bottom: 10px;
-        }
-        /* Try On button styling */
-        .try-on-button {
-          margin-top: 20px;
-          padding: 10px 16px;
-          font-size: 16px;
-          font-weight: bold;
-          background-color: #007aff;
-          color: #fff;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: background-color 0.3s ease;
-        }
-        .try-on-button:hover {
-          background-color: #005fcc;
-        }
-      }
-      /* Mobile layout: vertical stacking */
-      @media (max-width: 767px) {
-        .container {
-          display: flex;
-          flex-direction: column;
-          width: 100vw;
-          height: 100vh;
-        }
-        /* A-Frame scene takes the top half */
-        #arScene {
-          width: 100vw;
-          height: 50vh;
-          background: #f0f0f0;
-        }
-        /* QR container takes the bottom half */
-        .qr-side {
-          width: 100vw;
-          height: 50vh;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          position: relative;
-        }
-        /* Try On button styling adapts too */
-        .try-on-button {
-          margin-top: 20px;
-          padding: 10px 16px;
-          font-size: 16px;
-          font-weight: bold;
-          background-color: #007aff;
-          color: #fff;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: background-color 0.3s ease;
-        }
-        .try-on-button:hover {
-          background-color: #005fcc;
-        }
-      }
+      body { font-family: sans-serif; text-align: center; margin: 0; padding: 0; }
+      /* Container for A-Frame scene */
+      #modelViewerContainer { width: 100%; max-width: 600px; margin: 20px auto; }
+      /* Desktop UI elements */
+      #desktopUI { display: none; }
+      /* Mobile UI elements */
+      #mobileUI { display: none; }
+      /* QR code container styling */
+      #qrContainer { margin-top: 20px; }
+      button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+      /* Video element for AR face tracking */
+      #webcam { width: 640px; height: 480px; border: 1px solid #ccc; margin: 10px auto; display: none; }
     </style>
   </head>
   <body>
-    <div class="container">
-      <!-- A-Frame scene as our 3D model viewer -->
-      <a-scene id="arScene" embedded>
+    <!-- A-Frame Model Viewer Section (same for both desktop and mobile) -->
+    <div id="modelViewerContainer">
+      <a-scene embedded>
         <a-assets>
-          <!-- Load the glasses model uploaded to GitHub -->
-          <a-asset-item
-            id="glassesModel"
-            src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"
-          ></a-asset-item>
+          <a-asset-item id="glassesModel" src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"></a-asset-item>
         </a-assets>
-
-        <!-- Lights to illuminate the model -->
-        <a-entity light="type: ambient; intensity: 0.5"></a-entity>
-        <a-entity
-          light="type: directional; intensity: 0.7; castShadow: true"
-          position="0 1 1"
-        ></a-entity>
-
-        <!-- Entity with the glasses model -->
-        <a-entity
-          id="glasses"
-          gltf-model="#glassesModel"
-          position="0 1.6 -3"
-          scale="1 1 1"
-          animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"
-        ></a-entity>
-        <!-- Basic camera setup -->
+        <!-- This entity shows the glasses model. Initial position and scale may require calibration. -->
+        <a-entity id="glasses" gltf-model="#glassesModel" position="0 1.6 -2" scale="0.5 0.5 0.5"></a-entity>
         <a-camera position="0 1.6 0"></a-camera>
+        <a-light type="ambient" color="#FFF"></a-light>
       </a-scene>
-
-      <!-- Right side: QR code container and Try-on Button (for desktop) -->
-      <div class="qr-side" id="qr-container">
-        <p id="qr-label">Scan this QR code on your mobile device for AR:</p>
-        <canvas id="qr-code"></canvas>
-        <!-- Try On button -->
-        <button id="tryOnButton" class="try-on-button">
-          Try On Glasses
-        </button>
-      </div>
     </div>
 
+    <!-- Desktop UI Section -->
+    <div id="desktopUI">
+      <!-- QR Code Section -->
+      <div id="qrContainer"></div>
+      <!-- Desktop Try On Button -->
+      <button id="tryOnDesktopBtn">Start AR Try-On (Desktop)</button>
+    </div>
+
+    <!-- Mobile UI Section -->
+    <div id="mobileUI">
+      <!-- Mobile Try On Button -->
+      <button id="tryOnMobileBtn">Start AR Try-On (Mobile)</button>
+    </div>
+
+    <!-- Video element for webcam capture (used in both modes) -->
+    <video id="webcam" autoplay playsinline></video>
+
     <script>
-      // Helper function to detect mobile devices
-      function isMobileDevice() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-          navigator.userAgent
-        );
-      }
+      // Basic mobile detection (you can refine this)
+      const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
-      // URL for AR experience (current page)
-      const arUrl = window.location.href;
-
-      if (isMobileDevice()) {
-        // Mobile: hide the QR container to focus on the AR experience
-        document.getElementById("qr-container").style.display = "none";
+      // Show either the mobile or desktop UI based on the detection.
+      if (isMobile) {
+        document.getElementById("mobileUI").style.display = "block";
       } else {
-        // Desktop: generate a QR code linking to this page
-        new QRious({
-          element: document.getElementById("qr-code"),
-          value: arUrl,
-          size: 200,
+        document.getElementById("desktopUI").style.display = "block";
+      }
+      
+      // --- QR CODE GENERATION (only display on desktop) ---
+      if (!isMobile) {
+        // The generated QR code can point to the same URL of this page.
+        // In a real scenario, you might have a dedicated mobile URL.
+        new QRCode(document.getElementById("qrContainer"), {
+          text: window.location.href,
+          width: 128,
+          height: 128
         });
       }
+      
+      // --- MEDIAPIPE SETUP FOR FACE TRACKING ---
+      const videoElement = document.getElementById("webcam");
+      const glassesEntity = document.getElementById("glasses");
 
-      // Debugging: Log when the assets have loaded
-      const assetItem = document.querySelector("#glassesModel");
-      assetItem.addEventListener("loaded", function () {
-        console.log("Glasses model has been loaded successfully.");
-      });
-      assetItem.addEventListener("error", function (err) {
-        console.error("Error loading the glasses model:", err);
-      });
-
-      // Add an event listener to trigger the AR glasses try-on experience
-      document.getElementById("tryOnButton").addEventListener("click", function () {
-        startGlassesTryOn();
+      const faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
       });
 
-      // Placeholder function for initiating the Mediapipe FaceMesh AR try-on.
-      function startGlassesTryOn() {
-        console.log("Try On Glasses button clicked");
-        alert("Starting AR Glasses Try-On experience!");
-        // ================================
-        // Mediapipe Integration Steps:
-        // -------------------------------
-        // 1. Create a new FaceMesh instance:
-        //      const faceMesh = new FaceMesh({locateFile: (file) => {
-        //          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-        //      }});
-        //
-        // 2. Configure faceMesh options (e.g., maxNumFaces, refineLandmarks, minDetectionConfidence, etc.)
-        //
-        // 3. Use CameraUtils to capture the user's webcam feed:
-        //      const camera = new Camera(videoElement, {
-        //         onFrame: async () => {
-        //           await faceMesh.send({image: videoElement});
-        //         },
-        //         width: 1280,
-        //         height: 720
-        //      });
-        //      camera.start();
-        //
-        // 4. Process the output landmarks to position the glasses overlay dynamically.
-        // 5. Integrate the overlay with your A-Frame scene or a separate canvas element as needed.
-        // For full documentation, refer to the Mediapipe FaceMesh documentation.
-        // ================================
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      faceMesh.onResults(onResults);
+
+      function onResults(results) {
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+          const landmarks = results.multiFaceLandmarks[0];
+          // For instance, we use landmark 6 as a reference (adjust this if needed).
+          const noseTip = landmarks[6];
+          // Mapping from normalized Mediapipe coordinates ([0,1]) to A-Frame world coordinates.
+          const newPos = {
+            x: (noseTip.x - 0.5) * 2,
+            y: (0.5 - noseTip.y) * 2 + 1.6,
+            z: -2
+          };
+          glassesEntity.setAttribute("position", newPos);
+        }
+      }
+
+      // Create a function to initialize the camera with correct constraints.
+      function startCamera() {
+        // For mobile, explicitly request the front camera; desktop can use the default.
+        const cameraConstraints = {
+          width: 640,
+          height: 480,
+          facingMode: isMobile ? "user" : "environment"
+        };
+
+        const camera = new Camera(videoElement, {
+          onFrame: async () => {
+            await faceMesh.send({ image: videoElement });
+          },
+          ...cameraConstraints
+        });
+        
+        // Make sure the video element is visible once the camera starts.
+        videoElement.style.display = 'block';
+        camera.start();
+      }
+
+      // Event listeners for the try-on buttons.
+      if (!isMobile) {
+        document.getElementById("tryOnDesktopBtn").addEventListener("click", startCamera);
+      } else {
+        document.getElementById("tryOnMobileBtn").addEventListener("click", startCamera);
       }
     </script>
   </body>
