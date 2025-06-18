@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Ensure mobile devices scale the page correctly -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Glasses AR Try-On</title>
+
+    <!-- Three.js & GLTFLoader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <!-- MediaPipe FaceMesh & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+    <!-- QRious for QR Code generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .container {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      /* Desktop: side-by-side layout */
+      @media (min-width: 768px) {
+        .container {
+          flex-direction: row;
+        }
+        #viewer {
+          width: 50vw;
+          height: 100vh;
+          background: #f0f0f0;
+          position: relative;
+        }
+        #qr-container {
+          width: 50vw;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        /* Place try on button at bottom-right on desktop */
+        #tryOnBtn {
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+        }
+      }
+      /* Mobile: vertical stacking */
+      @media (max-width: 767px) {
+        #viewer {
+          width: 100vw;
+          height: 50vh;
+          background: #f0f0f0;
+          position: relative;
+        }
+        #qr-container {
+          width: 100vw;
+          height: 50vh;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+        /* Try on button remains in a fixed position */
+        #tryOnBtn {
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+        }
+      }
+      /* Common styles */
+      #tryOnBtn {
+        padding: 10px 20px;
+        background-color: #007aff;
+        border: none;
+        border-radius: 5px;
+        color: #fff;
+        cursor: pointer;
+        font-size: 16px;
+        z-index: 20;
+      }
+      /* AR overlay that appears when try-on is activated */
+      #ar-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        display: none; /* Initially hidden */
+        justify-content: center;
+        align-items: center;
+        z-index: 30;
+      }
+      /* Hide the video element (used only for processing) */
+      #ar-video {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Three.js viewer -->
+      <div id="viewer"></div>
+      
+      <!-- QR Code section -->
+      <div id="qr-container">
+        <p>Scan this QR code on your mobile device for AR:</p>
+        <canvas id="qr-code"></canvas>
+      </div>
+      
+      <!-- Try-On Button -->
+      <button id="tryOnBtn">Try On Glasses</button>
+    </div>
+    
+    <!-- AR overlay for the try-on experience -->
+    <div id="ar-overlay">
+      <!-- The video feed for MediaPipe face tracking -->
+      <video id="ar-video" autoplay playsinline></video>
+      <!-- A close button for the AR overlay -->
+      <button id="closeAR" style="position:absolute; top:20px; right:20px; padding:10px;">Close AR</button>
+    </div>
+
+    <script>
+      /* =============================
+         THREE.JS 3D MODEL VIEWER
+         ============================= */
+      let scene, camera, renderer, glassesModel;
+
+      function initThree() {
+        const viewer = document.getElementById('viewer');
+        scene = new THREE.Scene();
+        // Create a perspective camera (adjust FOV and aspect ratio as needed)
+        camera = new THREE.PerspectiveCamera(45, viewer.clientWidth / viewer.clientHeight, 0.1, 1000);
+        camera.position.set(0, 1.6, 3);
+        // Instantiate the renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+        viewer.appendChild(renderer.domElement);
+        // Ambient light for even lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+        scene.add(ambientLight);
+        
+        // Load the glasses model (glasses.glb in repository root)
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+          'glasses.glb',
+          function (gltf) {
+            glassesModel = gltf.scene;
+            // Adjust scale/position as needed
+            glassesModel.scale.set(0.5, 0.5, 0.5);
+            glassesModel.position.set(0, 1.6, 0);
+            scene.add(glassesModel);
+          },
+          undefined,
+          function (error) {
+            console.error('Error loading model:', error);
+          }
+        );
+        
+        animate();
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+
+      /* =============================
+         QR Code Generation via QRious
+         ============================= */
+      function generateQRCode() {
+        const qrElement = document.getElementById('qr-code');
+        new QRious({
+          element: qrElement,
+          value: window.location.href,
+          size: 200
+        });
+      }
+
+      /* =============================
+         MEDIA PIPELINE: FACE MESH FOR AR TRY-ON
+         ============================= */
+      let faceMesh, arVideoElement;
+
+      function initFaceMesh() {
+        arVideoElement = document.getElementById('ar-video');
+        faceMesh = new FaceMesh.FaceMesh({
+          locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+          }
+        });
+        faceMesh.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+        faceMesh.onResults(onFaceResults);
+
+        // Use MediaPipe Camera utils to get the video feed
+        const mpCamera = new CameraUtils.Camera(arVideoElement, {
+          onFrame: async () => {
+            await faceMesh.send({ image: arVideoElement });
+          },
+          width: 640,
+          height: 480
+        });
+        mpCamera.start();
+      }
+
+      // Called when MediaPipe FaceMesh returns results
+      function onFaceResults(results) {
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0 && glassesModel) {
+          const landmarks = results.multiFaceLandmarks[0];
+          // For positioning, we use two key landmarks:
+          // Index 33 (left eye inner corner) and 263 (right eye inner corner)
+          const left = landmarks[33];
+          const right = landmarks[263];
+          // Compute the midpoint in normalized coordinates (0 to 1)
+          const midX = (left.x + right.x) / 2;
+          const midY = (left.y + right.y) / 2;
+          // Approximate conversion from normalized screen coordinates to a small offset
+          // Adjust multipliers to achieve desired placement in your Three.js scene.
+          const offsetX = (midX - 0.5) * 2; // range roughly -1 to 1
+          const offsetY = -(midY - 0.5) * 2; // invert Y to match three.js coordinate system
+
+          // Here we simply update the glassesModel position relative to an assumed base position.
+          // In a real try-on, you'd convert from 2D landmarks to 3D world coordinates,
+          // possibly using a ray from the camera through the landmark.
+          glassesModel.position.x = offsetX;
+          glassesModel.position.y = 1.6 + offsetY * 0.2; // slight adjustment only
+          // You might also update the glassesModel rotation based on additional landmarks.
+        }
+      }
+
+      /* =============================
+         AR TRY-ON BUTTON & OVERLAY HANDLING
+         ============================= */
+      const tryOnBtn = document.getElementById('tryOnBtn');
+      const arOverlay = document.getElementById('ar-overlay');
+      const closeARBtn = document.getElementById('closeAR');
+
+      // When the Try-On button is clicked, reveal the AR overlay and start face tracking
+      tryOnBtn.addEventListener('click', () => {
+        arOverlay.style.display = 'flex';
+        // Hide the main viewer and QR code during AR
+        document.getElementById('viewer').style.display = 'none';
+        document.getElementById('qr-container').style.display = 'none';
+        // Initialize MediaPipe FaceMesh (only once)
+        if (!faceMesh) {
+          initFaceMesh();
+        }
+      });
+
+      // When the user clicks “Close AR”, hide the overlay and restore the layout
+      closeARBtn.addEventListener('click', () => {
+        arOverlay.style.display = 'none';
+        document.getElementById('viewer').style.display = 'block';
+        document.getElementById('qr-container').style.display = 'flex';
+      });
+
+      /* =============================
+         Initialize Everything on Load
+         ============================= */
+      window.addEventListener('load', () => {
+        initThree();
+        generateQRCode();
+      });
+    </script>
+  </body>
+</html>
