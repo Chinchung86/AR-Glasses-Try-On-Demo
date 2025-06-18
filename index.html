@@ -1,290 +1,714 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <!-- Ensure mobile devices scale the page correctly -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Glasses AR Try-On</title>
-
-    <!-- Three.js & GLTFLoader -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Glasses Try-On Experience</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-
-    <!-- MediaPipe FaceMesh & Camera Utils -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-    <!-- QRious for QR Code generation -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-
     <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100vw;
-        height: 100vh;
-        overflow: hidden;
-      }
-      .container {
-        width: 100vw;
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-      }
-      /* Desktop: side-by-side layout */
-      @media (min-width: 768px) {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #7209b7;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --success: #4cc9f0;
+            --border-radius: 12px;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: var(--light);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
         .container {
-          flex-direction: row;
+            display: flex;
+            flex-direction: column;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
         }
-        #viewer {
-          width: 50vw;
-          height: 100vh;
-          background: #f0f0f0;
-          position: relative;
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 20px;
         }
-        #qr-container {
-          width: 50vw;
-          height: 100vh;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
+
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #ff9a9e, #fad0c4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        #tryOnBtn {
-          position: absolute;
-          bottom: 20px;
-          right: 20px;
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #e0e0e0;
+            max-width: 600px;
+            margin: 0 auto;
         }
-      }
-      /* Mobile: vertical stacking */
-      @media (max-width: 767px) {
-        #viewer {
-          width: 100vw;
-          height: 50vh;
-          background: #f0f0f0;
-          position: relative;
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            gap: 30px;
         }
-        #qr-container {
-          width: 100vw;
-          height: 50vh;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
+
+        /* Desktop layout */
+        @media (min-width: 768px) {
+            .main-content {
+                flex-direction: row;
+            }
+            
+            .viewer-section {
+                flex: 1.5;
+            }
+            
+            .controls-section {
+                flex: 1;
+            }
         }
-        #tryOnBtn {
-          position: absolute;
-          bottom: 20px;
-          right: 20px;
+
+        /* Mobile layout */
+        @media (max-width: 767px) {
+            .main-content {
+                flex-direction: column;
+            }
         }
-      }
-      /* Common styles */
-      #tryOnBtn {
-        padding: 10px 20px;
-        background-color: #007aff;
-        border: none;
-        border-radius: 5px;
-        color: #fff;
-        cursor: pointer;
-        font-size: 16px;
-        z-index: 20;
-      }
-      /* AR overlay for the try-on experience */
-      #ar-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: #333;
-        display: none;
-        justify-content: center;
-        align-items: center;
-        z-index: 30;
-        flex-direction: column;
-      }
-      /* Display the video feed during AR try-on */
-      #ar-video {
-        width: 100%;
-        max-width: 640px;
-        height: auto;
-        border: 2px solid #fff;
-        border-radius: 5px;
-        background: #000;
-        display: block; /* Change from none to block so it's visible */
-      }
-      #closeAR {
-        margin-top: 10px;
-        padding: 10px 20px;
-        background-color: #FF3B30;
-        border: none;
-        border-radius: 5px;
-        color: #fff;
-        cursor: pointer;
-        font-size: 16px;
-        z-index: 31;
-      }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .viewer-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            background: #1e1e2e;
+        }
+
+        #modelCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #cameraView {
+            width: 100%;
+            height: 100%;
+            display: none;
+            position: relative;
+        }
+
+        #cameraView video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: var(--border-radius);
+        }
+
+        #cameraView canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: var(--border-radius);
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 50px;
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(67, 97, 238, 0.3);
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(67, 97, 238, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+            box-shadow: 0 4px 10px rgba(114, 9, 183, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: #5d0a8f;
+            box-shadow: 0 6px 15px rgba(114, 9, 183, 0.4);
+        }
+
+        .btn-ar {
+            background: linear-gradient(45deg, #ff9a9e, #fad0c4);
+            color: #333;
+        }
+
+        .btn-ar:hover {
+            background: linear-gradient(45deg, #ff7b81, #f8c1b3);
+        }
+
+        .btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .qr-container {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: var(--border-radius);
+        }
+
+        .qr-container p {
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            color: #e0e0e0;
+        }
+
+        #qrCode {
+            width: 180px;
+            height: 180px;
+            margin: 0 auto;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            margin-top: 20px;
+        }
+
+        .instructions h3 {
+            color: #4cc9f0;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .instructions ol {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        .instructions li {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 30px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .model-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 767px) {
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            .subtitle {
+                font-size: 1rem;
+            }
+            
+            .viewer-container {
+                height: 400px;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <div class="container">
-      <!-- Three.js viewer -->
-      <div id="viewer"></div>
-      
-      <!-- QR Code section -->
-      <div id="qr-container">
-        <p>Scan this QR code on your mobile device for AR:</p>
-        <canvas id="qr-code"></canvas>
-      </div>
-      
-      <!-- Try-On Button -->
-      <button id="tryOnBtn">Try On Glasses</button>
-    </div>
-    
-    <!-- AR overlay for the try-on experience -->
-    <div id="ar-overlay">
-      <!-- The video feed for MediaPipe face tracking -->
-      <video id="ar-video" autoplay playsinline></video>
-      <!-- Close AR button -->
-      <button id="closeAR">Close AR</button>
+        <header>
+            <h1>AR Glasses Try-On Experience</h1>
+            <p class="subtitle">See how our designer glasses look on you with our augmented reality technology</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="viewer-section panel">
+                <div class="viewer-container">
+                    <div class="loading-overlay" id="loadingOverlay">
+                        <div class="spinner"></div>
+                        <p>Loading 3D model and face tracking...</p>
+                    </div>
+                    
+                    <canvas id="modelCanvas"></canvas>
+                    <div id="cameraView">
+                        <video id="cameraFeed" playsinline></video>
+                        <canvas id="faceOverlay"></canvas>
+                    </div>
+                </div>
+                
+                <div class="model-controls">
+                    <button class="control-btn" id="rotateLeft" title="Rotate Left">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M15.41 16.09l-4.58-4.59 4.58-4.59L14 5.5l-6 6 6 6z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="resetView" title="Reset View">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                    </button>
+                    <button class="control-btn" id="rotateRight" title="Rotate Right">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M8.59 16.34l4.58-4.59-4.58-4.59L10 5.75l6 6-6 6z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="controls-section panel">
+                <div class="controls">
+                    <h2 style="margin-bottom: 15px; color: #4cc9f0;">Try On Our Glasses</h2>
+                    <p style="margin-bottom: 20px; line-height: 1.6;">Experience our premium collection in augmented reality. See how they look on your face in real-time!</p>
+                    
+                    <div class="button-group">
+                        <button id="tryOnBtn" class="btn btn-ar">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-9H8v2h2v2h2v-2h2v-2h-2V9h-2v2zm2-3h-2V7h2v1zm0 8h-2v-1h2v1z"/>
+                            </svg>
+                            Try On Glasses
+                        </button>
+                        
+                        <button id="switchModelBtn" class="btn btn-secondary">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M21 11.01L3 11v2h18zM3 16h12v2H3zM21 6H3v2.01L21 8z"/>
+                            </svg>
+                            Switch Model
+                        </button>
+                    </div>
+                    
+                    <div class="qr-container">
+                        <p>Scan to try on your phone</p>
+                        <canvas id="qrCode"></canvas>
+                    </div>
+                </div>
+                
+                <div class="instructions">
+                    <h3>How It Works</h3>
+                    <ol>
+                        <li>Click "Try On Glasses" to activate your camera</li>
+                        <li>Position your face in the frame</li>
+                        <li>The glasses will automatically adjust to your face</li>
+                        <li>Move your head to see different angles</li>
+                        <li>Click "Switch Model" to try different styles</li>
+                    </ol>
+                    <p>Works best in a well-lit environment without strong backlighting.</p>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2023 AR Glasses Try-On Experience | Powered by Three.js & MediaPipe</p>
+        </footer>
     </div>
 
     <script>
-      /* =============================
-         THREE.JS 3D MODEL VIEWER
-         ============================= */
-      let scene, camera, renderer, glassesModel;
-
-      function initThree() {
-        const viewer = document.getElementById('viewer');
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(45, viewer.clientWidth / viewer.clientHeight, 0.1, 1000);
-        camera.position.set(0, 1.6, 3);
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(viewer.clientWidth, viewer.clientHeight);
-        viewer.appendChild(renderer.domElement);
-
-        // Ambient light for even lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1);
-        scene.add(ambientLight);
+        // Global variables
+        let scene, camera, renderer, model, faceMesh;
+        let arActive = false;
+        let currentRotation = 0;
+        let currentModelIndex = 0;
+        const models = [
+            "https://raw.githubusercontent.com/Chinchung86/AR-Model-Demo/main/Sedia_Tommy_Grigio.glb",
+            "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@2.0/~/2.0/Sunglasses/glTF/Sunglasses.gltf"
+        ];
+        const modelNames = ["Designer Glasses", "Modern Sunglasses"];
         
-        // Load the glasses model – ensure glasses.glb is in the repository root
-        const loader = new THREE.GLTFLoader();
-        loader.load(
-          'glasses.glb',
-          (gltf) => {
-            glassesModel = gltf.scene;
-            glassesModel.scale.set(0.5, 0.5, 0.5);
-            glassesModel.position.set(0, 1.6, 0);
-            scene.add(glassesModel);
-          },
-          undefined,
-          (error) => {
-            console.error('Error loading model:', error);
-          }
-        );
-        animate();
-      }
-
-      function animate() {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
-      }
-
-      /* =============================
-         QR Code Generation (QRious)
-         ============================= */
-      function generateQRCode() {
-        const qrElement = document.getElementById('qr-code');
-        new QRious({
-          element: qrElement,
-          value: window.location.href,
-          size: 200
-        });
-      }
-
-      /* =============================
-         MEDIA PIPELINE: FACE MESH FOR AR TRY-ON
-         ============================= */
-      let faceMesh, arVideoElement, mpCamera;
-
-      function initFaceMesh() {
-        arVideoElement = document.getElementById('ar-video');
-        faceMesh = new FaceMesh.FaceMesh({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-        });
-        faceMesh.setOptions({
-          maxNumFaces: 1,
-          refineLandmarks: true,
-          minDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-        faceMesh.onResults(onFaceResults);
-
-        // Use MediaPipe Camera utils to capture video
-        mpCamera = new CameraUtils.Camera(arVideoElement, {
-          onFrame: async () => {
-            await faceMesh.send({ image: arVideoElement });
-          },
-          width: 640,
-          height: 480
-        });
-        mpCamera.start().catch((err) => console.error("Camera start error:", err));
-      }
-
-      function onFaceResults(results) {
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0 && glassesModel) {
-          const landmarks = results.multiFaceLandmarks[0];
-          // For instance, use landmarks 33 (left eye inner) and 263 (right eye inner) for midpoint
-          const left = landmarks[33];
-          const right = landmarks[263];
-          const midX = (left.x + right.x) / 2;
-          const midY = (left.y + right.y) / 2;
-          const offsetX = (midX - 0.5) * 2; // roughly -1 to 1
-          const offsetY = -(midY - 0.5) * 2; // invert Y axis
-
-          // Update glasses position (adjust scale multipliers as needed)
-          glassesModel.position.x = offsetX;
-          glassesModel.position.y = 1.6 + offsetY * 0.2;
+        // Initialize Three.js scene
+        function initThreeJS() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e1e2e);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, 
+                document.getElementById('modelCanvas').clientWidth / 
+                document.getElementById('modelCanvas').clientHeight, 
+                0.1, 1000
+            );
+            camera.position.z = 5;
+            
+            // Create renderer
+            const canvas = document.getElementById('modelCanvas');
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas,
+                antialias: true,
+                alpha: true
+            });
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 10);
+            scene.add(directionalLight);
+            
+            // Load initial model
+            loadModel(models[currentModelIndex]);
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = canvas.clientWidth / canvas.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            });
+            
+            // Start animation loop
+            animate();
         }
-      }
-
-      /* =============================
-         AR TRY-ON BUTTON & OVERLAY HANDLING
-         ============================= */
-      const tryOnBtn = document.getElementById('tryOnBtn');
-      const arOverlay = document.getElementById('ar-overlay');
-      const closeARBtn = document.getElementById('closeAR');
-
-      tryOnBtn.addEventListener('click', () => {
-        arOverlay.style.display = 'flex';
-        // Hide other parts of the page
-        document.getElementById('viewer').style.display = 'none';
-        document.getElementById('qr-container').style.display = 'none';
-        // Initialize MediaPipe if not already done
-        if (!faceMesh) {
-          initFaceMesh();
+        
+        // Load 3D model
+        function loadModel(url) {
+            // Remove existing model
+            if (model) {
+                scene.remove(model);
+            }
+            
+            const loader = new THREE.GLTFLoader();
+            loader.load(url, (gltf) => {
+                model = gltf.scene;
+                scene.add(model);
+                
+                // Scale and position the model
+                model.scale.set(0.8, 0.8, 0.8);
+                model.position.y = -0.5;
+                
+                // Hide loading overlay
+                document.getElementById('loadingOverlay').style.display = 'none';
+                
+                // Update model name in UI
+                document.querySelector('.controls h2').textContent = `Try On ${modelNames[currentModelIndex]}`;
+            }, undefined, (error) => {
+                console.error('Error loading model:', error);
+                document.getElementById('loadingOverlay').innerHTML = `
+                    <p style="color: #ff6b6b; text-align: center;">Error loading model. Please try again later.</p>
+                `;
+            });
         }
-      });
-
-      closeARBtn.addEventListener('click', () => {
-        arOverlay.style.display = 'none';
-        document.getElementById('viewer').style.display = 'block';
-        document.getElementById('qr-container').style.display = 'flex';
-        // Optionally stop the camera feed if desired
-        if (mpCamera) {
-          mpCamera.stop();
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (model && !arActive) {
+                model.rotation.y = currentRotation;
+                currentRotation += 0.005;
+            }
+            
+            renderer.render(scene, camera);
         }
-      });
-
-      /* =============================
-         Initialize on Page Load
-         ============================= */
-      window.addEventListener('load', () => {
-        initThree();
-        generateQRCode();
-      });
+        
+        // Initialize MediaPipe Face Mesh
+        function initFaceMesh() {
+            faceMesh = new FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            faceMesh.onResults(onFaceResults);
+        }
+        
+        // Handle face detection results
+        function onFaceResults(results) {
+            const video = document.getElementById('cameraFeed');
+            const canvas = document.getElementById('faceOverlay');
+            const ctx = canvas.getContext('2d');
+            
+            // Update canvas dimensions to match video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                // Draw face landmarks (optional, for debugging)
+                // drawConnectors(ctx, results.multiFaceLandmarks[0], FaceMesh.FACEMESH_TESSELATION, 
+                //     {color: '#C0C0C070', lineWidth: 1});
+                
+                // Position 3D model on face
+                if (model) {
+                    const landmarks = results.multiFaceLandmarks[0];
+                    
+                    // Get positions of key landmarks for glasses positioning
+                    const bridge = landmarks[168];  // Top of the nose bridge
+                    const leftEar = landmarks[454]; // Left ear
+                    const rightEar = landmarks[234]; // Right ear
+                    
+                    // Calculate center position for glasses
+                    const centerX = (leftEar.x + rightEar.x) / 2;
+                    const centerY = (leftEar.y + rightEar.y) / 2;
+                    
+                    // Calculate distance between ears for scaling
+                    const earDistance = Math.sqrt(
+                        Math.pow(rightEar.x - leftEar.x, 2) + 
+                        Math.pow(rightEar.y - leftEar.y, 2)
+                    );
+                    
+                    // Calculate rotation angle
+                    const angle = Math.atan2(rightEar.y - leftEar.y, rightEar.x - leftEar.x);
+                    
+                    // Position and scale the 3D model relative to face
+                    model.position.x = (centerX - 0.5) * 3;
+                    model.position.y = -(centerY - 0.5) * 3;
+                    model.position.z = -1;
+                    
+                    // Scale based on distance between ears
+                    const scale = earDistance * 1.5;
+                    model.scale.set(scale, scale, scale);
+                    
+                    // Rotate based on head tilt
+                    model.rotation.z = -angle;
+                }
+            }
+            
+            ctx.restore();
+        }
+        
+        // Start camera for AR experience
+        async function startCamera() {
+            try {
+                const video = document.getElementById('cameraFeed');
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'user' } 
+                });
+                
+                video.srcObject = stream;
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = resolve;
+                });
+                
+                video.play();
+                
+                // Show camera view and hide static model
+                document.getElementById('cameraView').style.display = 'block';
+                document.getElementById('modelCanvas').style.display = 'none';
+                
+                // Start processing camera feed
+                const camera = new Camera(video, {
+                    onFrame: async () => {
+                        await faceMesh.send({image: video});
+                    },
+                    width: 640,
+                    height: 480
+                });
+                
+                camera.start();
+                arActive = true;
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Could not access your camera. Please ensure you have a webcam connected and have granted permission.');
+            }
+        }
+        
+        // Stop camera and AR experience
+        function stopCamera() {
+            const video = document.getElementById('cameraFeed');
+            if (video.srcObject) {
+                const tracks = video.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            
+            // Show static model and hide camera view
+            document.getElementById('cameraView').style.display = 'none';
+            document.getElementById('modelCanvas').style.display = 'block';
+            
+            arActive = false;
+        }
+        
+        // Generate QR Code
+        function generateQRCode() {
+            const qr = new QRious({
+                element: document.getElementById('qrCode'),
+                value: window.location.href,
+                size: 180,
+                background: '#ffffff',
+                foreground: '#4361ee'
+            });
+        }
+        
+        // Event Listeners
+        document.getElementById('tryOnBtn').addEventListener('click', () => {
+            if (arActive) {
+                stopCamera();
+                document.getElementById('tryOnBtn').innerHTML = `
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-9H8v2h2v2h2v-2h2v-2h-2V9h-2v2zm2-3h-2V7h2v1zm0 8h-2v-1h2v1z"/>
+                    </svg>
+                    Try On Glasses
+                `;
+            } else {
+                startCamera();
+                document.getElementById('tryOnBtn').innerHTML = `
+                    <svg viewBox="0 0 24 24">
+                        <path d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M12 7c2.76 0 5 2.24 5 5s-2.24 5-5 5-5-2.24-5-5 2.24-5 5-5zm0-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
+                    </svg>
+                    Stop AR Experience
+                `;
+            }
+        });
+        
+        document.getElementById('switchModelBtn').addEventListener('click', () => {
+            currentModelIndex = (currentModelIndex + 1) % models.length;
+            loadModel(models[currentModelIndex]);
+        });
+        
+        document.getElementById('rotateLeft').addEventListener('click', () => {
+            currentRotation -= Math.PI / 8;
+        });
+        
+        document.getElementById('rotateRight').addEventListener('click', () => {
+            currentRotation += Math.PI / 8;
+        });
+        
+        document.getElementById('resetView').addEventListener('click', () => {
+            currentRotation = 0;
+        });
+        
+        // Initialize everything when page loads
+        window.addEventListener('load', () => {
+            initThreeJS();
+            initFaceMesh();
+            generateQRCode();
+        });
     </script>
-  </body>
+</body>
 </html>
