@@ -1,91 +1,536 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Glasses Try-On Demo</title>
-  <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-  <!-- Mediapipe FaceMesh -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <!-- Qrios QR Code Generator -->
-  <script src="https://cdn.jsdelivr.net/npm/qrios@1.0.2/dist/qrios.min.js"></script>
-  <style>
-    body { margin: 0; font-family: Arial, sans-serif; }
-    #container { display: flex; flex-direction: column; align-items: center; padding: 1rem; }
-    #viewer { width: 100%; max-width: 600px; height: 400px; border: 1px solid #ccc; }
-    #controls { margin-top: 1rem; }
-    #qr { margin-top: 1rem; }
-    button { padding: .5rem 1rem; font-size: 1rem; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Glasses Try-On</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px 0;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .main-content {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            flex: 1;
+            min-width: 300px;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .card-title {
+            font-size: 1.8rem;
+            text-align: center;
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+        
+        #model-viewer {
+            width: 100%;
+            height: 400px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+        
+        #model-viewer a-scene {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .qr-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px 0;
+        }
+        
+        #qr-code {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .qr-text {
+            text-align: center;
+            font-size: 1.1rem;
+            max-width: 300px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: linear-gradient(to right, #ff8a00, #da1b60);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(1px);
+        }
+        
+        .btn i {
+            font-size: 1.5rem;
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        
+        .instructions h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+        }
+        
+        .device-warning {
+            display: none;
+            background: rgba(255, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin-top: 10px;
+            border: 1px solid rgba(255, 0, 0, 0.3);
+        }
+        
+        .ar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        #ar-scene {
+            width: 100%;
+            max-width: 800px;
+            height: 80vh;
+        }
+        
+        .close-ar {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .close-ar:hover {
+            background: rgba(255, 0, 0, 0.5);
+            transform: rotate(90deg);
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 20px;
+            color: white;
+            font-size: 1.2rem;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #ff8a00;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        footer {
+            text-align: center;
+            padding: 30px 0 20px;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .card {
+                width: 100%;
+            }
+            
+            #model-viewer {
+                height: 300px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div id="container">
-    <div id="viewer"></div>
-    <div id="controls">
-      <button id="start-ar">Try On Glasses</button>
+    <div class="container">
+        <header>
+            <h1>AR Glasses Try-On Experience</h1>
+            <p class="subtitle">Try on virtual glasses using your camera. View in 3D, scan the QR code with your phone, and experience AR!</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="card">
+                <h2 class="card-title">3D Model Viewer</h2>
+                <div id="model-viewer">
+                    <a-scene embedded>
+                        <a-assets>
+                            <a-asset-item id="glasses-model" src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"></a-asset-item>
+                        </a-assets>
+                        
+                        <a-entity camera look-controls="enabled: true" position="0 1.6 0"></a-entity>
+                        
+                        <a-entity gltf-model="#glasses-model" 
+                                  position="0 1.25 -2" 
+                                  rotation="0 0 0"
+                                  scale="0.8 0.8 0.8"
+                                  animation="property: rotation; to: 0 360 0; loop: true; dur: 15000; easing: linear">
+                        </a-entity>
+                        
+                        <a-sky color="#ECECEC"></a-sky>
+                        <a-light type="ambient" intensity="0.8"></a-light>
+                        <a-light type="directional" intensity="0.5" position="-1 1 2"></a-light>
+                    </a-scene>
+                </div>
+                
+                <div class="controls">
+                    <button id="try-on-btn" class="btn">
+                        <i>👓</i> Try On Glasses (AR)
+                    </button>
+                    <div id="desktop-warning" class="device-warning">
+                        For best results, use the mobile experience by scanning the QR code
+                    </div>
+                </div>
+                
+                <div class="instructions">
+                    <h3>How to Use</h3>
+                    <ol>
+                        <li>View the glasses model above - you can rotate it by dragging</li>
+                        <li>Click "Try On Glasses" to see them on your face using your camera</li>
+                        <li>For mobile experience, scan the QR code with your phone's camera</li>
+                        <li>On your phone, click the "Try On" button to use your front camera</li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title">Mobile Experience</h2>
+                <div class="qr-container">
+                    <div id="qr-code"></div>
+                    <p class="qr-text">Scan this QR code with your phone to open the AR glasses try-on experience</p>
+                </div>
+                
+                <div class="controls">
+                    <button id="mobile-try-on-btn" class="btn" style="background: linear-gradient(to right, #00c6ff, #0072ff);">
+                        <i>📱</i> Try On with Mobile Camera
+                    </button>
+                    <div id="mobile-warning" class="device-warning">
+                        This experience requires a mobile device with a front-facing camera
+                    </div>
+                </div>
+                
+                <div class="instructions">
+                    <h3>Mobile Instructions</h3>
+                    <ol>
+                        <li>Open your phone's camera app and scan the QR code</li>
+                        <li>When the website opens, tap the "Try On" button</li>
+                        <li>Allow camera access when prompted</li>
+                        <li>Position your face in the frame to see the glasses</li>
+                        <li>Move your head to see the glasses from different angles</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="ar-overlay" id="ar-overlay">
+            <button class="close-ar" id="close-ar">✕</button>
+            <div id="ar-scene"></div>
+            <p>Position your face in the frame to see the glasses</p>
+        </div>
     </div>
-    <canvas id="qr"></canvas>
-  </div>
-
-  <script>
-    const MODEL_URL = 'https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb';
-    const viewerEl = document.querySelector('#viewer');
-    const startBtn = document.querySelector('#start-ar');
-    const qrCanvas = document.querySelector('#qr');
-    const pageUrl = window.location.href;
-    // Generate QR code for mobile link
-    Qrios.render({
-      target: qrCanvas,
-      text: pageUrl,
-      width: 200,
-      height: 200
-    });
-    // Inject A-Frame scene
-    viewerEl.innerHTML = `
-      <a-scene embedded vr-mode-ui="enabled: false" renderer="colorManagement: true;" arjs="sourceType: webcam; debugUIEnabled: false;">
-        <a-entity id="glasses" gltf-model="${MODEL_URL}" visible="false"></a-entity>
-        <a-entity camera></a-entity>
-      </a-scene>
-    `;
-
-    // Load Mediapipe FaceMesh
-    const faceMesh = new FaceMesh({locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-    faceMesh.setOptions({maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5});
-    faceMesh.onResults(onResults);
-
-    let videoInput, camera;
-    function initCamera() {
-      videoInput = document.createElement('video');
-      videoInput.style.display = 'none';
-      document.body.appendChild(videoInput);
-      camera = new Camera(videoInput, {onFrame: async () => await faceMesh.send({image: videoInput}), width:640, height:480});
-    }
-
-    function onResults(results) {
-      const glasses = document.querySelector('#glasses');
-      if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-        const lm = results.multiFaceLandmarks[0];
-        // Compute position & rotation from landmarks (e.g., between eyes)
-        const left = lm[33];
-        const right = lm[263];
-        const midX = (left.x + right.x)/2;
-        const midY = (left.y + right.y)/2;
-        glasses.setAttribute('position', `${(midX-0.5)*2} ${(0.5-midY)*2} -1`);
-        // Simple scale based on eye distance
-        const dist = Math.hypot(right.x-left.x, right.y-left.y);
-        glasses.setAttribute('scale', `${dist*5} ${dist*5} ${dist*5}`);
-        glasses.setAttribute('visible','true');
-      } else {
-        document.querySelector('#glasses').setAttribute('visible','false');
-      }
-    }
-
-    startBtn.addEventListener('click', () => {
-      initCamera();
-      camera.start();
-    });
-  </script>
+    
+    <footer>
+        <p>AR Glasses Try-On Experience | Built with A-Frame, MediaPipe, and QRious</p>
+    </footer>
+    
+    <script>
+        // Generate QR code for mobile experience
+        document.addEventListener('DOMContentLoaded', function() {
+            // Generate QR code
+            const qrCode = new QRious({
+                element: document.getElementById('qr-code'),
+                value: window.location.href,
+                size: 200,
+                background: '#ffffff',
+                foreground: '#000000',
+                backgroundAlpha: 1,
+                foregroundAlpha: 1,
+                level: 'H',
+                padding: 20
+            });
+            
+            // Detect if we're on a mobile device
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            // Show appropriate warnings
+            if (isMobile) {
+                document.getElementById('desktop-warning').style.display = 'block';
+            } else {
+                document.getElementById('mobile-warning').style.display = 'block';
+            }
+            
+            // Try on button event listener
+            document.getElementById('try-on-btn').addEventListener('click', startARExperience);
+            document.getElementById('mobile-try-on-btn').addEventListener('click', startARExperience);
+            document.getElementById('close-ar').addEventListener('click', closeARExperience);
+            
+            // Initialize face mesh
+            const faceMesh = new FaceMesh({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                }
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            function startARExperience() {
+                const arOverlay = document.getElementById('ar-overlay');
+                arOverlay.style.display = 'flex';
+                
+                // Create AR scene
+                const arScene = document.createElement('a-scene');
+                arScene.setAttribute('id', 'ar-scene');
+                arScene.setAttribute('embedded', '');
+                arScene.setAttribute('renderer', 'antialias: true; alpha: true');
+                arScene.innerHTML = `
+                    <a-assets>
+                        <a-asset-item id="glasses-model" src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"></a-asset-item>
+                    </a-assets>
+                    
+                    <a-entity camera="active: true" position="0 1.6 0"></a-entity>
+                    
+                    <a-entity id="glasses" 
+                              gltf-model="#glasses-model"
+                              position="0 0 -0.5"
+                              scale="0.3 0.3 0.3"
+                              visible="false">
+                    </a-entity>
+                    
+                    <a-entity id="face-camera" position="0 0 0"></a-entity>
+                `;
+                
+                document.getElementById('ar-scene').innerHTML = '';
+                document.getElementById('ar-scene').appendChild(arScene);
+                
+                // Start camera
+                startCamera(isMobile);
+            }
+            
+            function closeARExperience() {
+                document.getElementById('ar-overlay').style.display = 'none';
+                stopCamera();
+            }
+            
+            let videoElement;
+            let camera;
+            
+            function startCamera(isFrontFacing) {
+                // Create video element
+                videoElement = document.createElement('video');
+                videoElement.style.display = 'none';
+                document.body.appendChild(videoElement);
+                
+                // Start camera
+                camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await faceMesh.send({image: videoElement});
+                    },
+                    facingMode: isFrontFacing ? "user" : "environment",
+                    width: 640,
+                    height: 480
+                });
+                
+                camera.start();
+                
+                // Handle face mesh results
+                faceMesh.onResults(onFaceResults);
+            }
+            
+            function stopCamera() {
+                if (camera) {
+                    camera.stop();
+                }
+                if (videoElement) {
+                    videoElement.remove();
+                    videoElement = null;
+                }
+            }
+            
+            function onFaceResults(results) {
+                const scene = document.getElementById('ar-scene');
+                if (!scene) return;
+                
+                const glasses = scene.querySelector('#glasses');
+                if (!glasses) return;
+                
+                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                    const landmarks = results.multiFaceLandmarks[0];
+                    
+                    // Get key landmarks for glasses positioning
+                    const noseBridge = landmarks[168];  // Nose bridge
+                    const leftEye = landmarks[33];      // Left eye
+                    const rightEye = landmarks[263];    // Right eye
+                    
+                    if (noseBridge && leftEye && rightEye) {
+                        // Calculate position for glasses
+                        const centerX = (leftEye.x + rightEye.x) / 2;
+                        const centerY = (leftEye.y + rightEye.y) / 2;
+                        const centerZ = (leftEye.z + rightEye.z) / 2;
+                        
+                        // Calculate distance between eyes for scale
+                        const eyeDist = Math.sqrt(
+                            Math.pow(leftEye.x - rightEye.x, 2) +
+                            Math.pow(leftEye.y - rightEye.y, 2) +
+                            Math.pow(leftEye.z - rightEye.z, 2)
+                        );
+                        
+                        // Position glasses
+                        glasses.setAttribute('position', {
+                            x: centerX * 2 - 1,
+                            y: -centerY * 2 + 1,
+                            z: -centerZ * 2
+                        });
+                        
+                        // Scale glasses based on eye distance
+                        const scale = eyeDist * 3;
+                        glasses.setAttribute('scale', {
+                            x: scale,
+                            y: scale,
+                            z: scale
+                        });
+                        
+                        // Make glasses visible
+                        glasses.setAttribute('visible', 'true');
+                    }
+                } else {
+                    // Hide glasses if no face detected
+                    glasses.setAttribute('visible', 'false');
+                }
+            }
+        });
+    </script>
 </body>
 </html>
