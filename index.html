@@ -21,13 +21,12 @@
         overflow: hidden;
         background: #f0f0f0;
       }
-      /* Container splits the page into two parts on desktop */
       .container {
         display: flex;
         width: 100vw;
         height: 100vh;
       }
-      /* Desktop: A-Frame viewer takes left half; QR and instructions on the right */
+      /* Desktop view: side-by-side layout */
       @media (min-width: 768px) {
         .viewer {
           width: 50vw;
@@ -60,9 +59,10 @@
           color: #fff;
           font-size: 14px;
           cursor: pointer;
+          z-index: 10;
         }
       }
-      /* Mobile: Vertical stacking; hide QR side since we launch the experience on mobile already */
+      /* Mobile view: vertical stacking; hide the QR code container */
       @media (max-width: 767px) {
         .container {
           flex-direction: column;
@@ -87,6 +87,7 @@
           color: #fff;
           font-size: 14px;
           cursor: pointer;
+          z-index: 10;
         }
       }
       /* AR overlay styling */
@@ -119,56 +120,53 @@
   </head>
   <body>
     <div class="container">
-      <!-- Left side: 3D Model viewer using A-Frame -->
+      <!-- Left side: A-Frame 3D Model viewer-->
       <div class="viewer" id="viewer">
-        <a-scene embedded style="width: 100%; height: 100%;">
+        <a-scene embedded vr-mode-ui="enabled: false" style="width: 100%; height: 100%;">
           <a-assets>
             <!-- Load the glasses model from GitHub -->
             <a-asset-item id="glassesModel" src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"></a-asset-item>
           </a-assets>
 
-          <!-- A simple camera to allow orbiting -->
-          <a-entity
-            camera
-            look-controls
-            position="0 1.6 4">
-          </a-entity>
+          <!-- Adjusted camera farther back -->
+          <a-entity camera look-controls position="0 1.6 6"></a-entity>
 
-          <!-- Display the glasses model with a simple rotation animation -->
+          <!-- Display the glasses model with a slower rotation and centered placement -->
           <a-entity
             gltf-model="#glassesModel"
-            position="0 1 -3"
-            rotation="0 45 0"
+            position="0 1.6 -5"
+            rotation="0 0 0"
             scale="1 1 1"
-            animation="property: rotation; to: 0 405 0; loop: true; dur: 15000; easing: linear">
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 30000; easing: linear">
           </a-entity>
 
           <a-sky color="#ECECEC"></a-sky>
         </a-scene>
-        <!-- Try On button triggers the AR glasses try-on experience -->
+        <!-- Try On button to trigger AR experience -->
         <button class="tryon-btn" id="tryon-btn">Try On Glasses (AR)</button>
       </div>
-      <!-- Right side: QR code container (desktop only) -->
+      <!-- Right side: QR container (only on desktop) -->
       <div class="qr-side" id="qr-container">
         <p>Scan this QR code on your mobile device for AR:</p>
         <canvas id="qr-code"></canvas>
       </div>
     </div>
 
-    <!-- AR Overlay: contains a MindAR face-scene for the try-on experience -->
+    <!-- AR Overlay: The MindAR face scene for the try-on experience -->
     <div class="ar-overlay" id="ar-overlay">
       <button class="close-ar" id="close-ar">&#x2715;</button>
       <a-scene
-        mindar-face="autoStart: true; uiLoading: 'no'; uiScanning: 'no'; uiError: 'no';"
+        mindar-face="autoStart: false; videoConstraints: { facingMode: 'user' }"
         embedded
+        vr-mode-ui="enabled: false"
         style="width: 100%; height: 100%;">
         <a-assets>
-          <!-- Reuse the same glasses model -->
+          <!-- Load the glasses model for AR -->
           <a-asset-item id="ar-glasses" src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"></a-asset-item>
         </a-assets>
-        <!-- A simple camera for the MindAR face experience -->
+        <!-- The MindAR face camera (do not add the default camera component) -->
         <a-camera position="0 0 0"></a-camera>
-        <!-- Attach the glasses model to the detected face -->
+        <!-- Attach the glasses model to the user's face -->
         <a-entity mindar-face-target="targetIndex: 0">
           <a-gltf-model src="#ar-glasses"
                         position="0 0 0" 
@@ -179,17 +177,15 @@
     </div>
 
     <script>
-      // Device detection for mobile to decide whether to show the QR code container
+      // Device detection to determine if we display the QR code container
       function isMobileDevice() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       }
-
       const qrContainer = document.getElementById("qr-container");
       if (isMobileDevice()) {
-        // On mobile hide the QR container
         qrContainer.style.display = "none";
       } else {
-        // On desktop, generate a QR code linking to the current page URL
+        // Generate QR code linking to the current page URL
         new QRious({
           element: document.getElementById("qr-code"),
           value: window.location.href,
@@ -197,18 +193,29 @@
         });
       }
 
-      // Elements for toggling the AR experience overlay
+      // Elements for toggling the AR overlay
       const arOverlay = document.getElementById("ar-overlay");
       const tryOnBtn = document.getElementById("tryon-btn");
       const closeArBtn = document.getElementById("close-ar");
 
-      // Open the AR overlay when the try-on button is clicked
+      // When the Try On button is clicked, display the AR overlay and start MindAR.
       tryOnBtn.addEventListener("click", function () {
         arOverlay.style.display = "flex";
+        // Start the MindAR experience if it hasn't been started yet.
+        const mindarElem = document.querySelector("[mindar-face]");
+        if (mindarElem && !mindarElem.isRunning) {
+          mindarElem.components["mindar-face"].start();
+          mindarElem.isRunning = true;
+        }
       });
 
-      // Close the AR overlay when the close button is clicked
+      // Close the AR overlay and stop the MindAR camera stream if desired.
       closeArBtn.addEventListener("click", function () {
+        const mindarElem = document.querySelector("[mindar-face]");
+        if (mindarElem && mindarElem.isRunning) {
+          mindarElem.components["mindar-face"].stop();
+          mindarElem.isRunning = false;
+        }
         arOverlay.style.display = "none";
       });
     </script>
