@@ -8,7 +8,7 @@
 
     <!-- A-Frame Library for 3D model viewing -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <!-- Mediapipe libraries for FaceMesh through CDN -->
+    <!-- Mediapipe libraries for FaceMesh (for later integration) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
@@ -81,7 +81,7 @@
           height: 50vh;
           background: #f0f0f0;
         }
-        /* QR container takes the bottom half (optional usage) */
+        /* QR container takes the bottom half */
         .qr-side {
           width: 100vw;
           height: 50vh;
@@ -116,10 +116,27 @@
       <a-scene id="arScene" embedded>
         <a-assets>
           <!-- Load the glasses model uploaded to GitHub -->
-          <a-asset-item id="glassesModel" src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"></a-asset-item>
+          <a-asset-item
+            id="glassesModel"
+            src="https://raw.githubusercontent.com/Chinchung86/AR-Glasses-Try-On-Demo/main/glasses.glb"
+          ></a-asset-item>
         </a-assets>
+
+        <!-- Lights to illuminate the model -->
+        <a-entity light="type: ambient; intensity: 0.5"></a-entity>
+        <a-entity
+          light="type: directional; intensity: 0.7; castShadow: true"
+          position="0 1 1"
+        ></a-entity>
+
         <!-- Entity with the glasses model -->
-        <a-entity id="glasses" gltf-model="#glassesModel" position="0 1.6 -3" scale="1 1 1"></a-entity>
+        <a-entity
+          id="glasses"
+          gltf-model="#glassesModel"
+          position="0 1.6 -3"
+          scale="1 1 1"
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"
+        ></a-entity>
         <!-- Basic camera setup -->
         <a-camera position="0 1.6 0"></a-camera>
       </a-scene>
@@ -147,7 +164,7 @@
       const arUrl = window.location.href;
 
       if (isMobileDevice()) {
-        // Mobile: optionally, you can hide the QR container
+        // Mobile: hide the QR container to focus on the AR experience
         document.getElementById("qr-container").style.display = "none";
       } else {
         // Desktop: generate a QR code linking to this page
@@ -158,18 +175,24 @@
         });
       }
 
+      // Debugging: Log when the assets have loaded
+      const assetItem = document.querySelector("#glassesModel");
+      assetItem.addEventListener("loaded", function () {
+        console.log("Glasses model has been loaded successfully.");
+      });
+      assetItem.addEventListener("error", function (err) {
+        console.error("Error loading the glasses model:", err);
+      });
+
       // Add an event listener to trigger the AR glasses try-on experience
-      document
-        .getElementById("tryOnButton")
-        .addEventListener("click", function () {
-          startGlassesTryOn();
-        });
+      document.getElementById("tryOnButton").addEventListener("click", function () {
+        startGlassesTryOn();
+      });
 
       // Placeholder function for initiating the Mediapipe FaceMesh AR try-on.
       function startGlassesTryOn() {
-        alert(
-          "Starting AR Glasses Try-On experience. Integrate Mediapipe FaceMesh to access the webcam and overlay the glasses model."
-        );
+        console.log("Try On Glasses button clicked");
+        alert("Starting AR Glasses Try-On experience!");
         // ================================
         // Mediapipe Integration Steps:
         // -------------------------------
